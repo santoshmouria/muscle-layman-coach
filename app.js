@@ -8,6 +8,14 @@
     session: "form-field-session-v1",
   };
   const defaultSupabaseUrl = "https://ugtddogwcxduubbqbuel.supabase.co";
+  const wgerApiUrl = "https://wger.de/api/v2/exerciseinfo/?limit=1000&language=2";
+  const wgerLicense = {
+    1: { name: "CC BY-SA 3.0", url: "https://creativecommons.org/licenses/by-sa/3.0/" },
+    2: { name: "CC BY-SA 4.0", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
+    3: { name: "CC0 1.0", url: "https://creativecommons.org/publicdomain/zero/1.0/" },
+    4: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
+    5: { name: "ODbL", url: "https://opendatacommons.org/licenses/odbl/" },
+  };
   const workoutDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const modes = {
     gym: [
@@ -118,6 +126,8 @@
     plans: {},
     foods: demoFoods,
     exercises: [],
+    openExercises: [],
+    openExerciseStatus: "loading",
     needsExerciseModeMigration: false,
     selectedExercise: "",
     activeWorkoutDay: 1,
@@ -290,7 +300,7 @@
       },
       workouts: Array.isArray(plan?.workouts)
         ? plan.workouts.map((item) => ({
-            id: item.id || item.exercise_id || crypto.randomUUID(),
+            id: item.id || item.source_exercise_id || item.exercise_id || crypto.randomUUID(),
             name: item.name || item.exercise_name || "Exercise",
             category: item.category || "Training",
             equipment: item.equipment || "",
@@ -304,6 +314,14 @@
             coachingCues: String(item.coachingCues ?? item.coaching_cues ?? ""),
             primaryMuscle: String(item.primaryMuscle ?? item.primary_muscle ?? ""),
             contraindications: item.contraindications || [],
+            imageUrl: String(item.imageUrl ?? item.image_url ?? ""),
+            imageCredit: String(item.imageCredit ?? ""),
+            sourceUrl: String(item.sourceUrl ?? item.source_url ?? ""),
+            licenseName: String(item.licenseName ?? item.license_name ?? ""),
+            licenseUrl: String(item.licenseUrl ?? item.license_url ?? ""),
+            imageLicenseName: String(item.imageLicenseName ?? item.image_license_name ?? ""),
+            imageLicenseUrl: String(item.imageLicenseUrl ?? item.image_license_url ?? ""),
+            source: String(item.source ?? ""),
           }))
         : [],
       mode: plan?.mode === "bodyweight" ? "bodyweight" : "gym",
@@ -514,28 +532,87 @@
   }
 
   function allExercises(mode = state.mode) {
-    return state.exercises.length ? state.exercises.filter((exercise) => exercise.mode === mode) : modes[mode];
+    const sharedExercises = state.exercises.length
+      ? state.exercises.filter((exercise) => exercise.mode === mode)
+      : modes[mode];
+    const existingNames = new Set(sharedExercises.map((exercise) => exercise.name.trim().toLowerCase()));
+    return [
+      ...sharedExercises,
+      ...state.openExercises.filter((exercise) =>
+        exercise.mode === mode && !existingNames.has(exercise.name.trim().toLowerCase()),
+      ),
+    ];
+  }
+
+  async function loadOpenExerciseLibrary() {
+    state.openExerciseStatus = "loading";
+    try {
+      const response = await fetch(wgerApiUrl, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error(`Exercise library request failed (${response.status}).`);
+      const data = await response.json();
+      if (!Array.isArray(data.results)) throw new Error("Exercise library returned an unexpected response.");
+      const mapped = data.results.flatMap((exercise) => {
+        const translation = exercise.translations?.find((item) => item.language === 2);
+        const name = String(translation?.name || "").trim();
+        if (!name) return [];
+        const equipment = (exercise.equipment || []).map((item) => item.name).filter(Boolean).join(", ");
+        const muscles = exercise.muscles || [];
+        const primaryMuscle = muscles.map((item) => item.name_en || item.name).filter(Boolean).join(", ");
+        const category = exercise.category?.name || primaryMuscle || "Training";
+        const image = (exercise.images || []).find((item) => item.is_main) || exercise.images?.[0];
+        const imageUrl = image?.thumbnails?.medium || image?.thumbnails?.small || image?.image || "";
+        const imageLicense = wgerLicense[image?.license];
+        const exerciseLicense = exercise.license || {};
+        const mode = inferExerciseMode({ name, equipment });
+        return [{
+          id: `wger-${exercise.id}`,
+          name,
+          category,
+          equipment,
+          primaryMuscle,
+          mode,
+          contraindications: [],
+          description: "",
+          source: "wger",
+          sourceUrl: `https://wger.de/api/v2/exerciseinfo/${encodeURIComponent(exercise.id)}/`,
+          imageUrl: /^https:\/\/wger\.de\//i.test(imageUrl) ? imageUrl : "",
+          imageCredit: image?.license_author || "",
+          imageLicenseName: imageLicense?.name || "",
+          imageLicenseUrl: imageLicense?.url || "",
+          licenseName: exerciseLicense.short_name || "",
+          licenseUrl: /^https:\/\//i.test(exerciseLicense.url || "") ? exerciseLicense.url : "",
+        }];
+      });
+      state.openExercises = mapped;
+      state.openExerciseStatus = "ready";
+    } catch (error) {
+      state.openExerciseStatus = "error";
+      $("#exercise-hint").textContent = `Open-source exercise library unavailable: ${error.message}. Your connected or demo exercise list is still available.`;
+      $("#exercise-hint").classList.add("is-warning");
+    }
+    updateExerciseOptions();
   }
 
   function updateExerciseOptions() {
     const search = $("#exercise-search");
     const options = allExercises();
-    if (options.some((exercise) => exercise.id === state.selectedExercise)) {
-      const selected = options.find((exercise) => exercise.id === state.selectedExercise);
-      search.value = selected?.name || "";
-    } else {
-      state.selectedExercise = options[0]?.id || "";
-      search.value = options[0]?.name || "";
-    }
+    if (!options.some((exercise) => exercise.id === state.selectedExercise)) state.selectedExercise = "";
     renderExerciseOptions(search.value);
     const libraryHint = state.demoMode
       ? `${options.length} ${state.mode === "gym" ? "gym" : "bodyweight"} movements · fictional reference library`
       : `${options.length} movements in the shared ${state.mode === "gym" ? "gym" : "bodyweight"} library`;
+    const openLibraryHint = state.openExerciseStatus === "loading"
+      ? " · Loading open-source exercises…"
+      : state.openExerciseStatus === "ready"
+        ? ` · ${state.openExercises.filter((item) => item.mode === state.mode).length} from wger`
+        : "";
     const migrationHint = !state.demoMode && state.needsExerciseModeMigration
       ? " · Add training_mode to shared_exercises for precise filtering"
       : "";
-    $("#exercise-hint").textContent = `${libraryHint}${migrationHint}`;
-    $("#exercise-hint").classList.toggle("is-warning", Boolean(migrationHint));
+    if (state.openExerciseStatus !== "error") {
+      $("#exercise-hint").textContent = `${libraryHint}${openLibraryHint}${migrationHint}`;
+      $("#exercise-hint").classList.toggle("is-warning", Boolean(migrationHint));
+    }
   }
 
   function renderExerciseOptions(query = "") {
@@ -545,15 +622,21 @@
       [exercise.name, exercise.primaryMuscle, exercise.category, exercise.equipment]
         .some((value) => String(value || "").toLowerCase().includes(normalizedQuery)),
     );
-    list.innerHTML = matches.length
-      ? matches.map((exercise) => `
+    const visibleMatches = matches.slice(0, 40);
+    list.innerHTML = visibleMatches.length
+      ? `${visibleMatches.map((exercise) => `
           <button class="exercise-option${exercise.id === state.selectedExercise ? " is-selected" : ""}" type="button" role="option" aria-selected="${exercise.id === state.selectedExercise}" data-exercise-id="${escapeHtml(exercise.id)}">
-            <span class="exercise-option-name">${escapeHtml(exercise.name)}</span>
-            <span class="exercise-option-badges">
-              <span class="exercise-badge">${escapeHtml(exercise.primaryMuscle || exercise.category || "General")}</span>
-              <span class="exercise-badge exercise-badge-equipment">${escapeHtml(exercise.equipment || "No equipment")}</span>
+            ${exercise.imageUrl ? `<img class="exercise-option-image" src="${escapeHtml(exercise.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<span class="exercise-option-image exercise-option-placeholder" aria-hidden="true">ML</span>'}
+            <span class="exercise-option-content">
+              <span class="exercise-option-name">${escapeHtml(exercise.name)}</span>
+              <span class="exercise-option-badges">
+                <span class="exercise-badge">${escapeHtml(exercise.primaryMuscle || exercise.category || "General")}</span>
+                <span class="exercise-badge exercise-badge-equipment">${escapeHtml(exercise.equipment || "No equipment")}</span>
+              </span>
+              ${exercise.source === "wger" ? `<span class="exercise-option-credit">wger · ${escapeHtml(exercise.imageLicenseName || exercise.licenseName || "open exercise data")}</span>` : ""}
             </span>
-          </button>`).join("")
+          </button>`).join("")}
+        ${matches.length > visibleMatches.length ? `<p class="exercise-options-more">Showing ${visibleMatches.length} of ${matches.length}. Refine your search to see more.</p>` : ""}`
       : '<p class="exercise-options-empty">No matching exercises.</p>';
   }
 
@@ -602,9 +685,11 @@
           return `
             <article class="workout-item" data-index="${index}">
               <div class="workout-item-header">
+                ${item.imageUrl ? `<img class="workout-exercise-image" src="${escapeHtml(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}
                 <div class="workout-exercise">
                   <strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong>
                   <span>${escapeHtml(item.primaryMuscle || item.category)}${item.equipment ? ` · ${escapeHtml(item.equipment)}` : ""} · ${item.mode === "bodyweight" ? "Bodyweight" : "Gym"}</span>
+                  ${item.source === "wger" ? `<span class="exercise-attribution"><a href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">wger exercise data</a>${item.licenseName ? ` · <a href="${escapeHtml(item.licenseUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.licenseName)}</a>` : ""}${item.imageCredit ? ` · image: ${escapeHtml(item.imageCredit)}` : ""}${item.imageLicenseName && item.imageLicenseUrl ? ` · <a href="${escapeHtml(item.imageLicenseUrl)}" target="_blank" rel="noopener noreferrer">image ${escapeHtml(item.imageLicenseName)}</a>` : ""}</span>` : ""}
                 </div>
                 <button class="remove-exercise" type="button" data-remove="${index}" aria-label="Remove ${escapeHtml(item.name)}">×</button>
               </div>
@@ -800,10 +885,19 @@
       target_carbs_g: plan.macros.carbs,
       target_fat_g: plan.macros.fat,
       workout_routine: plan.workouts.map((item) => ({
-        exercise_id: item.id,
+        ...(item.source === "wger" ? {} : { exercise_id: item.id }),
+        source_exercise_id: item.id,
         name: item.name,
         category: item.category,
         equipment: item.equipment,
+        source: item.source || "shared_exercises",
+        source_url: item.sourceUrl || "",
+        image_url: item.imageUrl || "",
+        image_credit: item.imageCredit || "",
+        license_name: item.licenseName || "",
+        license_url: item.licenseUrl || "",
+        image_license_name: item.imageLicenseName || "",
+        image_license_url: item.imageLicenseUrl || "",
         training_mode: item.mode === "bodyweight" ? "bodyweight" : "gym",
         primary_muscle: item.primaryMuscle,
         contraindications: item.contraindications,
@@ -863,7 +957,12 @@
 
   function addExercise() {
     const exercise = allExercises().find((item) => item.id === state.selectedExercise);
-    if (!exercise) return;
+    if (!exercise) {
+      $("#exercise-hint").textContent = "Choose an exercise from the list first.";
+      $("#exercise-hint").classList.add("is-warning");
+      $("#exercise-search").focus();
+      return;
+    }
     if (state.workouts.some((item) => item.id === exercise.id)) {
       $("#exercise-hint").textContent = "That movement is already in this plan.";
       $("#exercise-hint").classList.add("is-warning");
@@ -876,6 +975,14 @@
       equipment: exercise.equipment || "",
       primaryMuscle: exercise.primaryMuscle || "",
       contraindications: exercise.contraindications || [],
+      source: exercise.source || "",
+      sourceUrl: exercise.sourceUrl || "",
+      imageUrl: exercise.imageUrl || "",
+      imageCredit: exercise.imageCredit || "",
+      licenseName: exercise.licenseName || "",
+      licenseUrl: exercise.licenseUrl || "",
+      imageLicenseName: exercise.imageLicenseName || "",
+      imageLicenseUrl: exercise.imageLicenseUrl || "",
       mode: state.mode,
       day: state.activeWorkoutDay,
       sets: 3,
@@ -1431,6 +1538,13 @@
       $("#exercise-hint").classList.remove("is-warning");
       $("#exercise-hint").textContent = `${exercise.primaryMuscle || exercise.category || "General"} · ${exercise.equipment || "No equipment"}`;
     });
+    const hideUnavailableImage = (event) => {
+      if (event.target instanceof HTMLImageElement && !event.target.naturalWidth) {
+        event.target.hidden = true;
+      }
+    };
+    $("#exercise-options").addEventListener("error", hideUnavailableImage, true);
+    $("#workout-list").addEventListener("error", hideUnavailableImage, true);
     $("#exercise-search").addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         $("#exercise-options").hidden = true;
@@ -1543,6 +1657,7 @@
     renderAll();
     loadPlanIntoEditor(existingPlan() || { status: "empty", mode: "gym" });
     bindEvents();
+    void loadOpenExerciseLibrary();
     void tryRestoreSession();
   }
 
