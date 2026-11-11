@@ -113,8 +113,8 @@
   });
   let clients = demoClients;
   const initialCoaches = [
-    { id: "coach-a", name: "Thulshi" },
-    { id: "coach-b", name: "Pratiksha" },
+    { id: "coach-a", name: "Coach A" },
+    { id: "coach-b", name: "Coach B" },
   ];
   let state = {
     mode: "gym",
@@ -225,8 +225,8 @@
   }
 
   function coachDisplayName(name) {
-    if (/^coach\s*a$/i.test(name.trim())) return "Thulshi";
-    if (/^coach\s*b$/i.test(name.trim())) return "Pratiksha";
+    if (/^(coach\s*a|thulshi)$/i.test(name.trim())) return "Coach A";
+    if (/^(coach\s*b|pratiksha)$/i.test(name.trim())) return "Coach B";
     return name;
   }
 
