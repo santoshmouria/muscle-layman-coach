@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1769e0" />
+    <meta
+      name="description"
+      content="A thoughtful workspace for building and reviewing personalized fitness transformation plans."
+    />
+    <title>Muscle Layman — Coach workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Muscle Layman home">
+        <span class="brand-mark" aria-hidden="true">
+          <span>ML</span>
+        </span>
+        <span class="brand-name">Muscle Layman</span>
+      </a>
+      <div class="topbar-right">
+        <span id="connection-pill" class="connection-pill">
+          <span class="connection-dot"></span>
+          <span id="connection-label">Demo workspace</span>
+        </span>
+        <label class="sr-only" for="coach-select">Switch coach profile</label>
+        <select id="coach-select" class="coach-select" aria-label="Switch coach profile"></select>
+        <button id="settings-button" class="icon-button" type="button" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a7.8 7.8 0 0 1-1.5.9l-.3 1.9h-2.8l-.3-1.9a7.8 7.8 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a7.8 7.8 0 0 1 1.5-.9l.3-1.9h2.8l.3 1.9a7.8 7.8 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1-.1 1.8Z"
+              transform="translate(-1 -1)"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="main-content" class="app-shell">
+      <section class="page-heading" aria-labelledby="page-title">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-line"></span> COACHING STUDIO</div>
+          <h1 id="page-title">Plan with <span>purpose.</span></h1>
+          <p class="page-description">
+            Thoughtful, individualized plans. Every rep and every choice, with a reason.
+          </p>
+        </div>
+        <div class="heading-meta">
+          <span class="date-icon" aria-hidden="true">
+            <svg viewBox="0 0 20 20" fill="none">
+              <rect x="3.1" y="5" width="13.8" height="11.5" rx="2" />
+              <path d="M6.5 3.2v3.4M13.5 3.2v3.4M3.3 8.5h13.4" />
+            </svg>
+          </span>
+          <span id="today-label"></span>
+        </div>
+      </section>
+
+      <section class="stat-grid" aria-label="Coach plan progress">
+        <article class="stat-card">
+          <span class="stat-icon stat-icon-blue" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="9" cy="8" r="3" />
+              <path d="M3.5 19v-1.2a5.5 5.5 0 0 1 11 0V19zM16 5.3a3 3 0 0 1 0 5.4M17.5 13.5a4.6 4.6 0 0 1 3 4.3V19h-3" />
+            </svg>
+          </span>
+          <div><span class="stat-label">YOUR CLIENTS</span><strong id="client-count">100</strong></div>
+          <span class="stat-note">shared roster</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-icon stat-icon-green" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M5 12.5 9.2 17 19 7" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+          <div><span class="stat-label">PLANS COMPLETE</span><strong id="completed-count">0</strong></div>
+          <span class="stat-note stat-note-green" id="completed-percentage">0% of roster</span>
+        </article>
+        <article class="stat-card">
+          <span class="stat-icon stat-icon-amber" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 3.5v9l6.5 3.8" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+          <div><span class="stat-label">STILL TO PLAN</span><strong id="remaining-count">100</strong></div>
+          <span class="stat-note">you've got this</span>
+        </article>
+      </section>
+
+      <div class="workspace-grid">
+        <section class="panel builder-panel" aria-labelledby="builder-title">
+          <div class="panel-heading">
+            <div class="panel-title-group">
+              <span class="panel-icon panel-icon-blue" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 6.5h14M5 12h14M5 17.5h8" />
+                  <circle cx="18" cy="17.5" r="1.5" />
+                  <circle cx="8" cy="6.5" r="1.5" />
+                </svg>
+              </span>
+              <div><h2 id="builder-title">Plan builder</h2><p>A good plan starts with listening.</p></div>
+            </div>
+            <button id="plan-status" class="status-badge status-empty" type="button" aria-label="Plan completion status: not started. Mark this plan complete.">NOT STARTED</button>
+          </div>
+
+          <div class="form-section client-section">
+            <div class="section-heading">
+              <span class="section-number">01</span>
+              <div><h3>Know your client</h3><p>Start with the person, not the program.</p></div>
+            </div>
+            <label class="field-label" for="client-select">CLIENT ROSTER</label>
+            <div class="select-wrap">
+              <select id="client-select" class="input select-input" aria-label="Choose a client"></select>
+              <span class="select-chevron" aria-hidden="true">⌄</span>
+            </div>
+            <div id="client-profile" class="client-card"></div>
+          </div>
+
+          <div class="form-section workout-section">
+            <div class="section-heading">
+              <span class="section-number">02</span>
+              <div><h3>Build the movement plan</h3><p>Match the movement to the goal and the person.</p></div>
+            </div>
+            <div class="mode-row">
+              <span class="field-label">TRAINING ENVIRONMENT</span>
+              <div id="mode-toggle" class="mode-toggle" role="group" aria-label="Training environment">
+                <button class="mode-button is-active" data-mode="gym" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 7.2v5.6M5 5.4v9.2M7.5 8v4M12.5 8v4M15 5.4v9.2m2.5-7.4v5.6M5 10h10" /></svg>
+                  Gym
+                </button>
+                <button class="mode-button" data-mode="bodyweight" type="button">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="4.3" r="2" /><path d="m7.1 8 2.9 1 2.9-1 2.1 3.4-2.2 1.1-.7 5.1H7.9l-.7-5.1L5 11.4z" /></svg>
+                  Bodyweight
+                </button>
+              </div>
+            </div>
+            <div class="exercise-picker">
+              <label class="field-label" for="exercise-search">ADD AN EXERCISE</label>
+              <div class="exercise-picker-row">
+                <div class="exercise-search-wrap">
+                  <input id="exercise-search" class="input" type="search" role="combobox" aria-autocomplete="list" aria-controls="exercise-options" aria-expanded="false" aria-label="Search exercises" placeholder="Search by exercise, muscle or equipment" autocomplete="off" />
+                  <div id="exercise-options" class="exercise-options" role="listbox" hidden></div>
+                </div>
+                <button id="add-exercise" class="button button-outline" type="button">Add exercise</button>
+              </div>
+              <p class="hint" id="exercise-hint"></p>
+            </div>
+            <div id="workout-list" class="workout-list"></div>
+          </div>
+
+          <div class="form-section nutrition-section">
+            <div class="section-heading">
+              <span class="section-number">03</span>
+              <div><h3>Set nutrition targets</h3><p>A flexible guide. Never a measure of worth.</p></div>
+            </div>
+            <div class="macro-grid">
+              <label class="macro-field"><span>CALORIES <small>kcal / day</small></span><input id="macro-calories" class="input" type="number" min="0" step="50" value="2000" /></label>
+              <label class="macro-field"><span>PROTEIN <small>grams / day</small></span><input id="macro-protein" class="input" type="number" min="0" step="5" value="130" /></label>
+              <label class="macro-field"><span>CARBS <small>grams / day</small></span><input id="macro-carbs" class="input" type="number" min="0" step="5" value="220" /></label>
+              <label class="macro-field"><span>FATS <small>grams / day</small></span><input id="macro-fat" class="input" type="number" min="0" step="5" value="65" /></label>
+            </div>
+            <details class="food-details">
+              <summary>Browse the shared food reference <span id="food-count" class="food-count"></span></summary>
+              <div id="food-list" class="food-list"></div>
+            </details>
+          </div>
+
+          <div class="builder-footer">
+            <span id="save-message" class="save-message" aria-live="polite"></span>
+            <div class="footer-actions">
+              <button id="reset-plan" class="button button-quiet" type="button">Reset</button>
+              <button id="save-plan" class="button button-primary" type="button">
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3.5h10l2.5 2.6v10.4h-13zM7 3.5v4h6v-4M7 16.5v-6h6v6" /></svg>
+                Save &amp; complete
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel ai-panel" aria-labelledby="ai-title">
+          <div class="ai-panel-heading">
+            <div class="panel-title-group">
+              <span class="panel-icon panel-icon-purple" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M12 3.5 13.9 9l5.6 2-5.6 1.9-1.9 5.6-1.9-5.6-5.6-1.9 5.6-2zM18.7 16.5l.8 2.1 2.1.8-2.1.8-.8 2.1-.7-2.1-2.1-.8 2.1-.8z" />
+                </svg>
+              </span>
+              <div><h2 id="ai-title">Thoughtful second opinion</h2><p>AI-assisted. Coach-led. Always.</p></div>
+            </div>
+            <span class="ai-label"><span></span> AI REVIEW</span>
+          </div>
+
+          <div class="ai-callout">
+            <span class="callout-icon" aria-hidden="true">✳</span>
+            <p>A second set of eyes for training stress, nutrition balance and movement considerations.</p>
+          </div>
+
+          <button id="review-plan" class="button button-ai" type="button">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.4 11.4 7l4.7 1.5-4.7 1.6L10 15l-1.6-4.9-4.7-1.6L8.4 7zM15.8 13l.6 1.7 1.7.6-1.7.7-.6 1.7-.7-1.7-1.7-.7 1.7-.6z" /></svg>
+            <span>Review this plan</span>
+            <span class="button-arrow" aria-hidden="true">→</span>
+          </button>
+          <p class="ai-action-note">A concise client profile and plan are sent to your selected AI provider for review. If it takes longer than 120 seconds, the request will time out with an error.</p>
+
+          <div id="ai-output" class="ai-output" aria-live="polite">
+            <div class="empty-state">
+              <div class="empty-orbit" aria-hidden="true">
+                <span>✳</span>
+                <i class="orbit-dot orbit-dot-one"></i>
+                <i class="orbit-dot orbit-dot-two"></i>
+                <i class="orbit-dot orbit-dot-three"></i>
+              </div>
+              <h3>Good plans invite good questions.</h3>
+              <p>Save your plan, then ask for a reasoned review. The final call always stays with you.</p>
+            </div>
+          </div>
+
+          <div class="ai-footnote">
+            <span class="footnote-icon" aria-hidden="true">i</span>
+            <p>AI can make mistakes. This is not medical advice or a substitute for clinical care. Review every suggestion.</p>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="page-footer">
+        <span class="footer-brand">Muscle Layman</span>
+        <span>Better care, built together.</span>
+        <span id="footer-data-mode">Demo data · stored on this device</span>
+      </footer>
+    </main>
+
+    <dialog id="settings-dialog" class="settings-dialog">
+      <form method="dialog" class="dialog-close-row"><button class="icon-button close-button" aria-label="Close settings">×</button></form>
+      <div class="dialog-heading">
+        <span class="panel-icon panel-icon-blue" aria-hidden="true">⚙</span>
+        <div><h2>Workspace settings</h2><p>Connect your own Supabase project, or keep using private demo data.</p></div>
+      </div>
+      <form id="settings-form" class="settings-form">
+        <label class="settings-label" for="supabase-url">SUPABASE PROJECT URL</label>
+        <input id="supabase-url" class="input" type="url" placeholder="https://your-project.supabase.co" autocomplete="url" />
+        <label class="settings-label" for="supabase-key">SUPABASE PUBLISHABLE / ANON KEY</label>
+        <input id="supabase-key" class="input" type="password" placeholder="sb_publishable_… or legacy anon key" autocomplete="off" />
+        <p class="settings-help">Use only a public browser key. Keep Row Level Security enabled; never put a service-role key here.</p>
+        <div id="auth-fields" class="auth-fields">
+          <label class="settings-label" for="auth-email">COACH ACCOUNT EMAIL</label>
+          <input id="auth-email" class="input" type="email" placeholder="you@example.com" autocomplete="username" />
+          <label class="settings-label" for="auth-password">PASSWORD</label>
+          <input id="auth-password" class="input" type="password" placeholder="Supabase account password" autocomplete="current-password" />
+          <div class="auth-actions">
+            <button id="connect-supabase" class="button button-primary" type="button">Sign in &amp; connect</button>
+            <button id="disconnect-supabase" class="button button-quiet" type="button">Sign out</button>
+          </div>
+        </div>
+        <div id="settings-error" class="settings-error" role="alert"></div>
+        <div class="settings-footer">
+          <button id="use-demo" class="button button-quiet" type="button">Use demo mode</button>
+          <button class="button button-outline" type="submit">Done</button>
+        </div>
+      </form>
+      <p class="settings-privacy">AI provider API keys are entered only when you request a review and are never saved by this app.</p>
+    </dialog>
+
+    <dialog id="gemini-dialog" class="settings-dialog gemini-dialog">
+      <form method="dialog" class="dialog-close-row"><button class="icon-button close-button" aria-label="Close AI review settings">×</button></form>
+      <div class="dialog-heading">
+        <span class="panel-icon panel-icon-purple" aria-hidden="true">✳</span>
+        <div><h2>AI plan review</h2><p>Choose an AI provider for this review.</p></div>
+      </div>
+      <form id="gemini-form" class="settings-form">
+        <label class="settings-label" for="ai-provider">AI PROVIDER</label>
+        <select id="ai-provider" class="input">
+          <option value="gemini">Gemini</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+          <option value="openai-compatible">Custom OpenAI-compatible API</option>
+        </select>
+        <label id="ai-key-label" class="settings-label" for="ai-api-key">API KEY</label>
+        <input id="ai-api-key" class="input" type="password" placeholder="Paste your provider API key" autocomplete="off" required />
+        <label class="settings-label" for="ai-model">MODEL</label>
+        <input id="ai-model" class="input" type="text" value="gemini-flash-lite-latest" required />
+        <div id="ai-endpoint-group" hidden>
+          <label class="settings-label" for="ai-endpoint">OPENAI-COMPATIBLE CHAT COMPLETIONS URL</label>
+          <input id="ai-endpoint" class="input" type="url" placeholder="https://api.example.com/v1/chat/completions" />
+        </div>
+        <p id="ai-provider-help" class="settings-help">Uses Gemini's Interactions API without storing the interaction. Your key stays in page memory only.</p>
+        <p class="settings-help">Browser API keys can be inspected by anyone with access to this page. For production use, route requests through a secure backend; do not use a secret key on a public/shared computer.</p>
+        <div id="gemini-error" class="settings-error" role="alert"></div>
+        <div class="settings-footer">
+          <button class="button button-quiet" type="button" id="cancel-gemini">Cancel</button>
+          <button class="button button-primary" type="submit">Continue to review <span aria-hidden="true">→</span></button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
