@@ -8,7 +8,7 @@ Before connecting, check **Database → Tables → RLS policies** and **API sett
 - `INSERT` and `UPDATE` on `coach_assigned_plans`, restricted to plans the signed-in coach owns.
 - RLS enabled on tables containing client and plan information, with policies that restrict plan reads/writes by the `coach_id` foreign key and that coach's `coaches.id`.
 
-The existing `coaches` table has `email` instead of an `auth_user_id`. Link the Supabase Auth account to a coach row using the matching email, and write coach policies against that relationship. The app maps the existing `Coach A` and `Coach B` labels to Thulshi and Pratiksha in the UI; it continues to use the original coach UUIDs in stored plans.
+The existing `coaches` table has `email` instead of an `auth_user_id`. Link the Supabase Auth account to a coach row using the matching email, and write coach policies against that relationship. The app displays coach rows as `Coach A` and `Coach B` whether their stored names are the original labels or the current coach names; it does not change database records and continues to use the original coach UUIDs in stored plans.
 
 The exact existing RLS policies were not included with the column-list export, so this guide intentionally does not replace or disable any of them. Review current policies before adding policies: permissive Supabase policies are combined, and an older broad policy can unintentionally grant access even when a new restrictive policy is added. Do not expose onboarding/client tables to the anonymous role.
 
