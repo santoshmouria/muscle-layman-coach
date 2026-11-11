@@ -6,6 +6,7 @@
     settings: "form-field-settings-v1",
     demoPlans: "form-field-demo-plans-v1",
     session: "form-field-session-v1",
+    coach: "form-field-active-coach-v1",
   };
   const defaultSupabaseUrl = "https://ugtddogwcxduubbqbuel.supabase.co";
   const wgerApiUrl = "https://wger.de/api/v2/exerciseinfo/?limit=1000&language=2";
@@ -16,7 +17,7 @@
     4: { name: "CC BY 4.0", url: "https://creativecommons.org/licenses/by/4.0/" },
     5: { name: "ODbL", url: "https://opendatacommons.org/licenses/odbl/" },
   };
-  const workoutDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const workoutDays = ["Push / Quads", "Pull / Posterior Chain", "Upper / Core", "Lower / Glutes", "Full Body", "Conditioning", "Recovery / Mobility"];
   const modes = {
     gym: [
       { id: "g1", name: "Goblet squat", category: "Lower body", equipment: "Dumbbell" },
@@ -116,9 +117,11 @@
     { id: "coach-a", name: "Coach A" },
     { id: "coach-b", name: "Coach B" },
   ];
+  let storedCoachId = "";
+  try { storedCoachId = localStorage.getItem(storageKeys.coach) || ""; } catch { /* Storage can be unavailable in private browsing. */ }
   let state = {
     mode: "gym",
-    coachId: "coach-a",
+    coachId: storedCoachId || "coach-a",
     clientId: clients[0].id,
     coaches: initialCoaches,
     workouts: [],
@@ -131,6 +134,7 @@
     needsExerciseModeMigration: false,
     selectedExercise: "",
     activeWorkoutDay: 1,
+    clientFilter: "",
     backend: null,
     demoMode: true,
     session: null,
@@ -283,6 +287,11 @@
     return state.plans[planKey(coachId, clientId)] || null;
   }
 
+  function hasAssignedPlan(coachId, clientId) {
+    const plan = existingPlan(coachId, clientId);
+    return plan?.status === "draft" || plan?.status === "completed";
+  }
+
   function normalizedPlan(plan) {
     const macros = plan?.macros || {};
     const macroValue = (value, fallback) => {
@@ -357,6 +366,7 @@
     } else {
       renderEmptyReview();
     }
+    updateNutritionSummary();
   }
 
   function $$(selector) {
@@ -393,16 +403,30 @@
   }
 
   function renderClientOptions() {
-    const select = $("#client-select");
-    const fragment = document.createDocumentFragment();
-    clients.forEach((client) => {
-      const option = document.createElement("option");
-      option.value = client.id;
-      option.textContent = `${client.name} · ${client.goal}`;
-      fragment.append(option);
+    const search = $("#client-search");
+    const list = $("#client-options");
+    if (!search || !list) return;
+    const query = search.value.trim().toLowerCase();
+    const matches = clients.filter((client) => {
+      const profile = client.profile || {};
+      if (state.clientFilter === "needs-plan" && hasAssignedPlan(state.coachId, client.id)) return false;
+      if (state.clientFilter === "medical" && !clientHasMedicalFlags(client)) return false;
+      if (state.clientFilter === "vegetarian" && !clientDietMatches(client, true)) return false;
+      if (state.clientFilter === "non-vegetarian" && !clientDietMatches(client, false)) return false;
+      return !query || [client.name, client.displayId, client.id, client.goal, profile.dietary_preferences]
+        .some((value) => String(value || "").toLowerCase().includes(query));
     });
-    select.replaceChildren(fragment);
-    select.value = state.clientId;
+    const visible = matches.slice(0, 12);
+    list.innerHTML = visible.length
+      ? `${visible.map((client) => {
+          const assigned = hasAssignedPlan(state.coachId, client.id);
+          return `<button class="client-option${client.id === state.clientId ? " is-selected" : ""}" type="button" role="option" aria-selected="${client.id === state.clientId}" data-client-id="${escapeHtml(client.id)}">
+            <span class="client-option-main"><strong>${escapeHtml(client.name)}</strong><small>${escapeHtml(client.goal || "Goal not recorded")}</small></span>
+            <span class="client-option-meta"><small>${escapeHtml(client.displayId || client.id)}</small><small class="${assigned ? "client-plan-assigned" : "client-plan-pending"}">${assigned ? "Plan assigned" : "Needs plan"}</small></span>
+          </button>`;
+        }).join("")}${matches.length > visible.length ? `<p class="client-options-more">Showing ${visible.length} of ${matches.length}. Refine your search.</p>` : ""}`
+      : '<p class="client-options-empty">No clients match this search and filter.</p>';
+    search.setAttribute("aria-expanded", String(!list.hidden));
   }
 
   function renderCoachOptions() {
@@ -419,12 +443,54 @@
       state.coachId = state.coaches[0]?.id || "coach-a";
     }
     select.value = state.coachId;
+    try { localStorage.setItem(storageKeys.coach, state.coachId); } catch { /* Coach switching still works when storage is unavailable. */ }
   }
 
   function profileValue(value) {
     if (Array.isArray(value)) return value.filter((item) => item != null && item !== "").join(", ");
     if (typeof value === "boolean") return value ? "Yes" : "No";
     return value == null ? "" : String(value).trim();
+  }
+
+  function clientHealthText(client) {
+    const profile = client.profile || {};
+    return [
+      profileValue(profile.medical_conditions),
+      profileValue(profile.endocrine_conditions),
+      profileValue(profile.body_and_health_concerns),
+      profileValue(client.constraints),
+    ].filter(Boolean).join(" · ");
+  }
+
+  function clientHasMedicalFlags(client) {
+    const text = clientHealthText(client);
+    const recordedDetails = text.replace(/\b(?:no health details|no medical conditions|no concerns|none recorded|not recorded|none|n\/a)\b/gi, "");
+    return /\b(injur\w*|disc|herniat\w*|spinal|spine|back pain|acl|pcos|insulin resistance|diabet\w*|hypertension|blood pressure|arthritis|osteoarthritis|metabolic|endocrine)\b/i.test(recordedDetails);
+  }
+
+  function clientDietMatches(client, vegetarian) {
+    const profile = client.profile || {};
+    const text = `${profileValue(profile.dietary_preferences)} ${profileValue(profile.meal_plan_type)}`.toLowerCase();
+    if (vegetarian) return !/\b(non[- ]?vegetarian|nonveg|non-veg|non[- ]?vegan)\b/.test(text) &&
+      /\b(vegetarian|vegan|plant[- ]based)\b/.test(text);
+    return /\b(non[- ]?vegetarian|omnivore|nonveg|non-veg)\b/.test(text);
+  }
+
+  function renderClinicalTags(client) {
+    const text = clientHealthText(client);
+    if (!clientHasMedicalFlags(client)) return "";
+    const tags = [];
+    if (/\b(disc|herniat\w*|spinal|spine|lumbar|back pain|sciatica)\b/i.test(text)) {
+      tags.push(["clinical-tag-red", "Spine / loading caution"]);
+    }
+    if (/\b(pcos|insulin resistance|diabet|metabolic|endocrine)\b/i.test(text)) {
+      tags.push(["clinical-tag-amber", "Metabolic / endocrine note"]);
+    }
+    if (/\b(acl|knee|shoulder|hip|joint|arthritis|injur\w*)\b/i.test(text)) {
+      tags.push(["clinical-tag-blue", "Joint / injury note"]);
+    }
+    if (!tags.length) tags.push(["clinical-tag-amber", "Recorded medical note"]);
+    return `<div class="clinical-tags" aria-label="Recorded health information">${tags.map(([className, label]) => `<span class="clinical-tag ${className}">${escapeHtml(label)}</span>`).join("")}<span class="clinical-tag-note">Review with client; not a diagnosis.</span></div>`;
   }
 
   function renderProfileSection(title, entries, fallback) {
@@ -448,6 +514,7 @@
 
   function renderClientProfile() {
     const client = currentClient();
+    $("#client-search").value = client.name;
     const initials = client.name
       .split(/\s+/)
       .map((part) => part[0])
@@ -515,6 +582,7 @@
           <p class="client-id"><span class="detail-label">CLIENT ID</span><code>${escapeHtml(clientId)}</code></p>
         </div>
       </div>
+      ${renderClinicalTags(client)}
       <section class="profile-section profile-snapshot" aria-label="Client snapshot">
         <h4>At a glance</h4>
         <dl class="client-facts">${facts.map(([label, value]) => `
@@ -647,12 +715,16 @@
       : String(item.contraindications || "").split(/[,;|]/);
     contraindications.filter(Boolean).forEach((note) => warnings.push(`Library caution: ${toText(note)}`));
 
-    const clientHealth = String(currentClient()?.constraints || "").toLowerCase();
+    const clientHealth = clientHealthText(currentClient()).toLowerCase();
     const exerciseText = `${item.name} ${item.category} ${item.coachingCues}`.toLowerCase();
-    const clientHasBackConcern = /\b(back|spine|spinal|lumbar|disc|sciatica)\b/.test(clientHealth);
-    const movementLoadsSpine = /\b(deadlift|romanian|good morning|bent.?over|barbell squat|loaded carry|back squat)\b/.test(exerciseText);
+    const clientHasBackConcern = /\b(back|spine|spinal|lumbar|disc|sciatica|herniat)\b/.test(clientHealth);
+    const movementLoadsSpine = /\b(deadlift|romanian|rdl|good morning|bent.?over|barbell squat|loaded carry|back squat|leg press)\b/.test(exerciseText);
     if (clientHasBackConcern && movementLoadsSpine) {
-      warnings.push("Review movement tolerance: the client profile notes a back or spinal concern. Confirm suitability with the client and their clinician.");
+      warnings.push("Client record notes a spine or back concern. Review load and movement tolerance with the client; follow their clinician's guidance.");
+    }
+    if (/\b(hypertension|high blood pressure|blood pressure)\b/.test(clientHealth) &&
+      /\b(heavy|max|near.max|high intensity|barbell|leg press|deadlift|squat)\b/.test(exerciseText)) {
+      warnings.push("Client record notes a blood-pressure concern. Review exertion, breathing and suitability with the client and their clinician.");
     }
     return warnings;
   }
@@ -665,7 +737,7 @@
         .map((item, index) => ({ item, index }))
         .filter(({ item }) => Number(item.day) === dayNumber);
       return `<button class="workout-day-tab${dayNumber === state.activeWorkoutDay ? " is-active" : ""}" type="button" role="tab" id="workout-tab-${dayNumber}" aria-controls="workout-panel" aria-selected="${dayNumber === state.activeWorkoutDay}" tabindex="${dayNumber === state.activeWorkoutDay ? "0" : "-1"}" data-day="${dayNumber}">
-        <span>Day ${dayNumber}</span><small>${assigned.length}</small>
+        <span>Day ${dayNumber}</span><small>${escapeHtml(day)}</small><b>${assigned.length}</b>
       </button>`;
     }).join("");
     const assigned = state.workouts
@@ -683,7 +755,7 @@
               </span>
             </label>`;
           return `
-            <article class="workout-item" data-index="${index}">
+            <article class="workout-item${warnings.length ? " has-safety-warning" : ""}" data-index="${index}">
               <div class="workout-item-header">
                 ${item.imageUrl ? `<img class="workout-exercise-image" src="${escapeHtml(item.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}
                 <div class="workout-exercise">
@@ -727,14 +799,47 @@
   function updateProgress() {
     const coachPlans = Object.entries(state.plans)
       .filter(([key]) => key.startsWith(`${state.coachId}::`))
-      .map(([, plan]) => plan);
-    const complete = coachPlans.filter((plan) => plan.status === "completed").length;
-    const total = state.demoMode ? clients.length : Math.max(clients.length, coachPlans.length);
+      .map(([key, plan]) => ({ key, plan }));
+    const complete = coachPlans.filter(({ plan }) => plan.status === "completed").length;
+    const assignedClientIds = new Set(coachPlans.filter(({ plan }) => plan.status === "draft" || plan.status === "completed")
+      .map(({ key, plan }) => plan.clientId || key.slice(key.indexOf("::") + 2)));
+    const total = clients.length;
     const percent = total ? Math.round((complete / total) * 100) : 0;
     $("#client-count").textContent = String(clients.length);
     $("#completed-count").textContent = String(complete);
-    $("#remaining-count").textContent = String(Math.max(total - complete, 0));
+    $("#remaining-count").textContent = String(clients.filter((client) => !assignedClientIds.has(client.id)).length);
     $("#completed-percentage").textContent = `${percent}% of roster`;
+    renderClientOptions();
+  }
+
+  function updateNutritionSummary() {
+    const fields = ["#macro-protein", "#macro-carbs", "#macro-fat"].map((selector) => $(selector).value.trim());
+    const values = fields.map((value) => value === "" ? NaN : Number(value));
+    const caloriesField = $("#macro-calories");
+    const summary = $("#macro-summary");
+    const ratios = $("#macro-client-ratios");
+    if (values.some((value) => !Number.isFinite(value) || value < 0)) {
+      caloriesField.value = "";
+      summary.textContent = "Enter valid macro values to calculate daily calories and percentages.";
+      ratios.textContent = "";
+      state.macros = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+      return;
+    }
+    const [protein, carbs, fat] = values;
+    const proteinKcal = protein * 4;
+    const carbsKcal = carbs * 4;
+    const fatKcal = fat * 9;
+    const calories = Math.round(proteinKcal + carbsKcal + fatKcal);
+    caloriesField.value = String(calories);
+    state.macros = { calories, protein, carbs, fat };
+    const share = (value) => calories ? Math.round((value / calories) * 100) : 0;
+    summary.textContent = calories
+      ? `Macro energy split: Protein ${share(proteinKcal)}% · Carbs ${share(carbsKcal)}% · Fat ${share(fatKcal)}%`
+      : "Enter non-zero macro targets to calculate the energy split.";
+    const weight = Number(currentClient()?.weightKg);
+    ratios.textContent = Number.isFinite(weight) && weight > 0 && calories
+      ? `For ${weight} kg: Protein ${(protein / weight).toFixed(2)} g/kg · Calorie density ${(calories / weight).toFixed(1)} kcal/kg`
+      : "Client weight is not recorded; g/kg and kcal/kg ratios are unavailable.";
   }
 
   function renderAll() {
@@ -745,9 +850,13 @@
     updateExerciseOptions();
     renderWorkoutList();
     updateProgress();
-    $("#connection-label").textContent = state.demoMode ? "Demo workspace" : "Supabase connected";
+    $("#connection-label").textContent = state.demoMode ? "Local Mock Mode" : "Supabase Connected (Live)";
     $("#connection-pill").classList.toggle("is-connected", !state.demoMode);
+    $("#connection-pill").classList.toggle("is-demo", state.demoMode);
+    const projectRef = state.backend?.url ? new URL(state.backend.url).hostname.split(".")[0] : "";
+    $("#connection-project").textContent = projectRef ? `Project: ${projectRef}` : "No project connected";
     $("#footer-data-mode").textContent = state.demoMode ? "Demo data · stored on this device" : "Connected to your Supabase project";
+    updateNutritionSummary();
   }
 
   function readEditorPlan(status = "draft") {
@@ -757,7 +866,7 @@
     };
     return {
       macros: {
-        calories: readMacro("#macro-calories"),
+        calories: state.macros.calories,
         protein: readMacro("#macro-protein"),
         carbs: readMacro("#macro-carbs"),
         fat: readMacro("#macro-fat"),
@@ -870,7 +979,6 @@
     });
     renderAll();
     loadPlanIntoEditor(existingPlan() || { status: "empty", mode: "gym" });
-    $("#client-select").value = state.clientId;
   }
 
   async function saveSupabasePlan(plan) {
@@ -931,13 +1039,13 @@
     if (invalidField) {
       invalidField.reportValidity();
       setSaveMessage("Check the highlighted targets and workout details.", true);
-      return;
+      return false;
     }
     const plan = readEditorPlan(status);
     try {
       if (!plan.macros.calories || !plan.macros.protein) {
         setSaveMessage("Add calorie and protein targets first.", true);
-        return;
+        return false;
       }
       if (state.demoMode) {
         state.plans[planKey(state.coachId, state.clientId)] = plan;
@@ -950,8 +1058,10 @@
       renderPlanStatus(plan.status);
       updateProgress();
       setSaveMessage(plan.status === "completed" ? "Plan saved and marked complete." : "Draft saved just now.");
+      return true;
     } catch (error) {
       setSaveMessage(error.message, true);
+      return false;
     }
   }
 
@@ -1036,7 +1146,14 @@
     const risks = Array.isArray(result.biomechanicalRisks) ? result.biomechanicalRisks : [];
     const justifications = Array.isArray(result.physiologicalJustifications) ? result.physiologicalJustifications : [];
     const riskHtml = risks.length
-      ? risks.map((risk) => `<li class="risk-item"><strong>${escapeHtml(risk.risk)}</strong><span>Alternative: ${escapeHtml(risk.alternative)}${risk.reason ? ` · ${escapeHtml(risk.reason)}` : ""}</span></li>`).join("")
+      ? risks.map((risk, riskIndex) => {
+          const swap = findReviewSwap(risk);
+          return `<li class="risk-item">
+            <strong>${escapeHtml(risk.risk)}</strong>
+            <span>Alternative: ${escapeHtml(risk.alternative)}${risk.reason ? ` · ${escapeHtml(risk.reason)}` : ""}</span>
+            ${swap ? `<button type="button" class="button button-outline apply-swap" data-swap-index="${riskIndex}" data-source-index="${swap.sourceIndex}" data-replacement-id="${escapeHtml(swap.replacement.id)}">Apply swap: ${escapeHtml(swap.replacement.name)}</button>` : ""}
+          </li>`;
+        }).join("")
       : "<li>No specific biomechanical risks identified from the information provided.</li>";
     const justificationHtml = justifications.length
       ? justifications.map((item) => `<li>${escapeHtml(item)}</li>`).join("")
@@ -1054,6 +1171,94 @@
       </div>`;
   }
 
+  function reviewSwapCandidates() {
+    const candidates = [...modes.gym, ...modes.bodyweight, ...state.exercises, ...state.openExercises];
+    const seen = new Set();
+    return candidates.filter((item) => {
+      const key = String(item.id || item.name).toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function normalizedExerciseName(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function findReviewSwap(risk) {
+    if (!risk || typeof risk !== "object" || typeof risk.alternative !== "string") return null;
+    const workouts = state.workouts;
+    const statedName = normalizedExerciseName(risk.exerciseName);
+    const riskText = normalizedExerciseName(risk.risk);
+    let sourceIndex = statedName
+      ? workouts.findIndex((item) => normalizedExerciseName(item.name) === statedName)
+      : -1;
+    if (sourceIndex < 0) {
+      sourceIndex = workouts.findIndex((item) => {
+        const name = normalizedExerciseName(item.name);
+        return name.length >= 5 && riskText.includes(name);
+      });
+    }
+    if (sourceIndex < 0) return null;
+    const alternatives = risk.alternative.split(/\s*(?:\/|\bor\b)\s*/i).map(normalizedExerciseName).filter(Boolean);
+    const sourceMode = workouts[sourceIndex].mode;
+    const candidates = reviewSwapCandidates().filter((item) => inferExerciseMode(item) === sourceMode);
+    for (const alternative of alternatives) {
+      const exact = candidates.find((item) =>
+        item.id !== workouts[sourceIndex].id && normalizedExerciseName(item.name) === alternative,
+      );
+      if (exact) return { sourceIndex, replacement: exact };
+      const words = alternative.split(/\s+/).filter((word) => word.length > 2);
+      const approximate = candidates
+        .map((item) => {
+          const candidateWords = new Set(normalizedExerciseName(item.name).split(/\s+/));
+          const overlap = words.filter((word) => candidateWords.has(word)).length / Math.max(words.length, 1);
+          return { item, overlap };
+        })
+        .filter(({ item, overlap }) => item.id !== workouts[sourceIndex].id && overlap >= 0.65)
+        .sort((a, b) => b.overlap - a.overlap)[0];
+      if (approximate) return { sourceIndex, replacement: approximate.item };
+    }
+    return null;
+  }
+
+  function applyReviewSwap(sourceIndex, replacementId) {
+    const current = state.workouts[sourceIndex];
+    const replacement = reviewSwapCandidates().find((item) =>
+      String(item.id) === replacementId && inferExerciseMode(item) === current?.mode,
+    );
+    if (!current || !replacement) {
+      showToast("That movement is no longer available. Review the exercise list and try again.");
+      return false;
+    }
+    state.workouts[sourceIndex] = {
+      ...current,
+      id: replacement.id,
+      name: replacement.name,
+      category: replacement.category || current.category,
+      equipment: replacement.equipment || "",
+      primaryMuscle: replacement.primaryMuscle || replacement.primary_muscle || "",
+      contraindications: replacement.contraindications || [],
+      mode: replacement.mode || inferExerciseMode(replacement),
+      source: replacement.source || "",
+      sourceUrl: replacement.sourceUrl || "",
+      imageUrl: replacement.imageUrl || "",
+      imageCredit: replacement.imageCredit || "",
+      licenseName: replacement.licenseName || "",
+      licenseUrl: replacement.licenseUrl || "",
+      imageLicenseName: replacement.imageLicenseName || "",
+      imageLicenseUrl: replacement.imageLicenseUrl || "",
+      coachingCues: replacement.description || replacement.coaching_cues || current.coachingCues,
+    };
+    state.activeWorkoutDay = Number(current.day) || 1;
+    renderWorkoutList();
+    renderPlanStatus("unsaved");
+    setSaveMessage("Review the suggested movement and save the updated plan when ready.");
+    showToast(`${replacement.name} replaced ${current.name}.`);
+    return true;
+  }
+
   function renderEmptyReview() {
     $("#ai-output").innerHTML = `
       <div class="empty-state">
@@ -1066,12 +1271,75 @@
       </div>`;
   }
 
-  async function saveAiEvaluation(result) {
+  function renderClientPlanExport() {
+    const client = currentClient();
+    const plan = readEditorPlan(existingPlan()?.status || "draft");
+    const days = workoutDays.map((name, dayIndex) => {
+      const dayNumber = dayIndex + 1;
+      const exercises = plan.workouts.filter((item) => Number(item.day) === dayNumber);
+      if (!exercises.length) return "";
+      return `<section class="export-day"><h2>Day ${dayNumber} · ${escapeHtml(name)}</h2><ul>${exercises.map((item) => `<li><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.sets)} sets × ${escapeHtml(item.reps)} reps · RIR ${escapeHtml(item.rir)} · Rest ${escapeHtml(item.restSeconds)}s${item.tempo ? ` · Tempo ${escapeHtml(item.tempo)}` : ""}</span>${item.coachingCues ? `<small>${escapeHtml(item.coachingCues)}</small>` : ""}</li>`).join("")}</ul></section>`;
+    }).filter(Boolean).join("");
+    const calories = plan.macros.calories;
+    $("#client-plan-export").innerHTML = `
+      <header class="export-heading">
+        <p class="export-brand">MUSCLE LAYMAN</p>
+        <h1 id="export-title">${escapeHtml(client.name)} · Training &amp; Nutrition</h1>
+        <p>Your current coaching plan</p>
+      </header>
+      <section class="export-nutrition">
+        <h2>Daily nutrition targets</h2>
+        <p><strong>${escapeHtml(calories)} kcal</strong> · Protein ${escapeHtml(plan.macros.protein)} g · Carbs ${escapeHtml(plan.macros.carbs)} g · Fat ${escapeHtml(plan.macros.fat)} g</p>
+      </section>
+      <div class="export-workouts">${days || "<p>No movements have been added to this plan yet.</p>"}</div>
+      <p class="export-footer">Follow your coach's instructions and share any discomfort or changes in how you feel.</p>`;
+    const text = [
+      `${client.name} — Training & Nutrition`,
+      `Daily targets: ${calories} kcal | Protein ${plan.macros.protein}g | Carbs ${plan.macros.carbs}g | Fat ${plan.macros.fat}g`,
+      ...workoutDays.flatMap((name, dayIndex) => {
+        const dayNumber = dayIndex + 1;
+        const exercises = plan.workouts.filter((item) => Number(item.day) === dayNumber);
+        return exercises.length
+          ? ["", `Day ${dayNumber} · ${name}`, ...exercises.map((item) => `• ${item.name}: ${item.sets} × ${item.reps} (RIR ${item.rir}), rest ${item.restSeconds}s${item.tempo ? `, tempo ${item.tempo}` : ""}${item.coachingCues ? ` — ${item.coachingCues}` : ""}`)]
+          : [];
+      }),
+      "",
+      "Share any discomfort or changes in how you feel with your coach.",
+    ].join("\n");
+    $("#client-plan-export").dataset.copyText = text;
+    $("#export-dialog").showModal();
+  }
+
+  async function copyClientPlan() {
+    const text = $("#client-plan-export").dataset.copyText || "";
+    if (!text) {
+      showToast("Create the client summary before copying it.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast("Client summary copied to clipboard.");
+    } catch {
+      showToast("Could not copy the summary. Check clipboard permission and try again.");
+    }
+  }
+
+  async function saveAiEvaluation(result, provider, model) {
     const plan = existingPlan();
     if (!plan) throw new Error("Save the plan before saving its AI review.");
+    const evaluation = {
+      ...result,
+      reviewMetadata: { provider, model, reviewedAt: new Date().toISOString() },
+      reviewedPlan: {
+        coachId: state.coachId,
+        clientId: state.clientId,
+        macros: { ...state.macros },
+        workouts: state.workouts.map((item) => ({ ...item })),
+      },
+    };
     const updated = {
       ...plan,
-      aiEvaluation: result,
+      aiEvaluation: evaluation,
       aiScore: result.score,
       updatedAt: new Date().toISOString(),
     };
@@ -1085,7 +1353,7 @@
       method: "PATCH",
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
-        ai_evaluation: result,
+        ai_evaluation: evaluation,
         ai_score: result.score,
         updated_at: updated.updatedAt,
       }),
@@ -1108,8 +1376,9 @@
             risk: { type: "string" },
             alternative: { type: "string" },
             reason: { type: "string" },
+            exerciseName: { type: "string", description: "Exact name of the workout movement associated with this risk, or an empty string if no exact match." },
           },
-          required: ["risk", "alternative", "reason"],
+          required: ["risk", "alternative", "reason", "exerciseName"],
         },
       },
       physiologicalJustifications: { type: "array", items: { type: "string" } },
@@ -1149,6 +1418,7 @@
       "Critique nutrition targets cautiously; do not make unsupported claims about energy needs or recommend aggressive restriction.",
       "Score plan coherence and completeness, not the client's body or worth.",
       "Offer lower-risk, symptom-guided movement alternatives when appropriate, and explicitly say when the profile is insufficient to identify a specific risk.",
+      "For each movement risk, set exerciseName to the exact name from the proposed workouts; use an empty string when you cannot identify a specific movement. Alternatives should name an exercise, not a vague category.",
     ].join(" ");
     const reviewData = {
       clientProfile: profile,
@@ -1156,7 +1426,7 @@
         mode: plan.mode,
         dailyNutritionTargets: plan.macros,
         workouts: plan.workouts.map(({ name, category, equipment, primaryMuscle, mode, day, sets, reps, rir, restSeconds, tempo, coachingCues, contraindications }) => ({
-          name, category, equipment, primaryMuscle, mode, day, dayName: workoutDays[day - 1], sets, reps, repsInReserve: rir, restSeconds, tempo, coachingCues, contraindications,
+          name, category, equipment, primaryMuscle, mode, day, dayName: `Day ${day} (${workoutDays[day - 1]})`, sets, reps, repsInReserve: rir, restSeconds, tempo, coachingCues, contraindications,
         })),
       },
     };
@@ -1167,7 +1437,7 @@
     const provider = $("#ai-provider").value;
     const defaults = {
       gemini: {
-        model: "gemini-flash-lite-latest",
+        model: "gemini-2.5-flash",
         help: "Uses Gemini's Interactions API without storing the interaction. Your key stays in page memory only.",
       },
       openai: {
@@ -1305,37 +1575,39 @@
       };
     }
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
-    let response;
+    const timeoutId = setTimeout(() => controller.abort(), 35000);
     try {
-      response = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        if (controller.signal.aborted) {
+          throw new Error("The request timed out while waiting for the provider response.");
+        }
+        throw new Error(`${providerName} returned an unreadable response (HTTP ${response.status}).`);
+      }
+      if (!response.ok) {
+        const detail = data?.error?.message || data?.message || `Request failed (HTTP ${response.status}).`;
+        throw new Error(detail);
+      }
+      return parseReviewJson(reviewResponseText(data, provider), providerName);
     } catch (error) {
-      if (error.name === "AbortError") {
-        throw new Error(`${providerName} review timed out after 120 seconds. Check your connection, provider access and model, then try again.`);
+      if (error.name === "AbortError" || controller.signal.aborted) {
+        throw new Error(`${providerName} review timed out after 35 seconds. Check your connection, provider access and model, then try again.`);
       }
       if (error instanceof TypeError) {
         throw new Error(`Could not reach ${providerName}. Check the endpoint, internet connection and browser CORS support. A backend proxy may be required.`);
       }
-      throw new Error(`Could not reach ${providerName}: ${error.message}`);
+      throw error;
     } finally {
       clearTimeout(timeoutId);
     }
-    let data;
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error(`${providerName} returned an unreadable response (HTTP ${response.status}).`);
-    }
-    if (!response.ok) {
-      const detail = data?.error?.message || data?.message || `Request failed (HTTP ${response.status}).`;
-      throw new Error(detail);
-    }
-    return parseReviewJson(reviewResponseText(data, provider), providerName);
   }
 
   async function onReviewSubmit(event) {
@@ -1362,8 +1634,8 @@
       $("#gemini-error").classList.add("is-visible");
       return;
     }
-    if (!existingPlan()) await savePlan("draft");
-    if (!existingPlan()) {
+    const savedForReview = await savePlan(existingPlan()?.status === "completed" ? "completed" : "draft");
+    if (!savedForReview) {
       $("#gemini-error").textContent = $("#save-message").textContent || "Save this plan before requesting a review.";
       $("#gemini-error").classList.add("is-visible");
       return;
@@ -1377,7 +1649,7 @@
       const result = await requestAiReview({ provider, apiKey: activeAiKey, model, endpoint });
       renderReview(result);
       try {
-        await saveAiEvaluation(result);
+        await saveAiEvaluation(result, provider, model);
       } catch (error) {
         $("#ai-output .review-result").insertAdjacentHTML(
           "beforeend",
@@ -1494,18 +1766,54 @@
   function bindEvents() {
     $("#coach-select").addEventListener("change", (event) => {
       state.coachId = event.target.value;
-      loadPlanIntoEditor(existingPlan() || { status: "empty", mode: "gym" });
+      try { localStorage.setItem(storageKeys.coach, state.coachId); } catch { /* Coach switching still works when storage is unavailable. */ }
       renderClientProfile();
+      loadPlanIntoEditor(existingPlan() || { status: "empty", mode: "gym" });
       updateProgress();
       setSaveMessage("");
     });
-    $("#client-select").addEventListener("change", (event) => {
-      state.clientId = event.target.value;
+    const selectClient = (clientId) => {
+      if (!clients.some((client) => client.id === clientId)) return;
+      state.clientId = clientId;
+      $("#client-options").hidden = true;
       renderClientProfile();
       loadPlanIntoEditor(existingPlan() || { status: "empty", mode: "gym" });
+      renderClientOptions();
       setSaveMessage("");
-      $("#ai-output").innerHTML = '<div class="empty-state"><div class="empty-orbit" aria-hidden="true"><span>✳</span><i class="orbit-dot orbit-dot-one"></i><i class="orbit-dot orbit-dot-two"></i><i class="orbit-dot orbit-dot-three"></i></div><h3>Good plans invite good questions.</h3><p>Save your plan, then ask for a reasoned review. The final call always stays with you.</p></div>';
+    };
+    $("#client-search").addEventListener("focus", () => {
+      if ($("#client-search").value === currentClient().name) $("#client-search").value = "";
+      renderClientOptions();
+      $("#client-options").hidden = false;
+      $("#client-search").setAttribute("aria-expanded", "true");
     });
+    $("#client-search").addEventListener("input", () => {
+      renderClientOptions();
+      $("#client-options").hidden = false;
+      $("#client-search").setAttribute("aria-expanded", "true");
+    });
+    $("#client-search").addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        $("#client-options").hidden = true;
+        $("#client-search").setAttribute("aria-expanded", "false");
+      } else if (event.key === "Enter" && !$("#client-options").hidden) {
+        event.preventDefault();
+        $("#client-options [data-client-id]")?.click();
+      }
+    });
+    $("#client-options").addEventListener("click", (event) => {
+      const option = event.target.closest("[data-client-id]");
+      if (option) selectClient(option.dataset.clientId);
+    });
+    $$(".client-filter-chip").forEach((button) => button.addEventListener("click", () => {
+      state.clientFilter = state.clientFilter === button.dataset.clientFilter ? "" : button.dataset.clientFilter;
+      $$(".client-filter-chip").forEach((chip) => chip.setAttribute("aria-pressed", String(chip.dataset.clientFilter === state.clientFilter)));
+      $("#client-search").value = "";
+      renderClientOptions();
+      $("#client-options").hidden = false;
+      $("#client-search").setAttribute("aria-expanded", "true");
+      $("#client-search").focus();
+    }));
     $$(".mode-button").forEach((button) => button.addEventListener("click", () => {
       if (state.mode === button.dataset.mode) return;
       state.mode = button.dataset.mode;
@@ -1556,6 +1864,22 @@
       }
     });
     $("#add-exercise").addEventListener("click", addExercise);
+    ["#macro-protein", "#macro-carbs", "#macro-fat"].forEach((selector) => $(selector).addEventListener("input", updateNutritionSummary));
+    $("#export-client-card").addEventListener("click", renderClientPlanExport);
+    $("#copy-client-plan").addEventListener("click", copyClientPlan);
+    $("#print-client-plan").addEventListener("click", () => window.print());
+    $("#close-export").addEventListener("click", () => $("#export-dialog").close());
+    $("#ai-output").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-swap-index]");
+      if (!button) return;
+      if (!applyReviewSwap(Number(button.dataset.sourceIndex), button.dataset.replacementId)) return;
+      button.disabled = true;
+      button.textContent = "Swap applied · review and save";
+      $("#ai-output .review-result")?.insertAdjacentHTML(
+        "beforeend",
+        '<p class="review-disclaimer">This review reflects the plan before the swap. Review the updated plan again before relying on the feedback.</p>',
+      );
+    });
     $("#workout-list").addEventListener("input", (event) => {
       const index = Number(event.target.closest(".workout-item")?.dataset.index);
       const field = event.target.dataset.field;

@@ -15,22 +15,23 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=coach-labels" />
-    <script src="./app.js?v=coach-labels" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=workspace-upgrade-2" />
+    <script src="./app.js?v=workspace-upgrade-2" defer></script>
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="#" aria-label="Muscle Layman home">
-        <span class="brand-mark" aria-hidden="true">
-          <span>ML</span>
+        <span class="brand-mark" aria-hidden="true"><span>ML</span></span>
+        <span class="brand-copy">
+          <span class="brand-name">Muscle Layman</span>
+          <span id="connection-pill" class="connection-pill is-demo" role="status">
+            <span class="connection-dot"></span>
+            <span id="connection-label">Local Mock Mode</span>
+          </span>
         </span>
-        <span class="brand-name">Muscle Layman</span>
       </a>
       <div class="topbar-right">
-        <span id="connection-pill" class="connection-pill">
-          <span class="connection-dot"></span>
-          <span id="connection-label">Demo workspace</span>
-        </span>
+        <span id="connection-project" class="connection-project">No project connected</span>
         <label class="sr-only" for="coach-select">Switch coach profile</label>
         <select id="coach-select" class="coach-select" aria-label="Switch coach profile"></select>
         <button id="settings-button" class="icon-button" type="button" aria-label="Settings">
@@ -93,8 +94,8 @@
               <circle cx="12" cy="12" r="9" />
             </svg>
           </span>
-          <div><span class="stat-label">STILL TO PLAN</span><strong id="remaining-count">100</strong></div>
-          <span class="stat-note">you've got this</span>
+          <div><span class="stat-label">PENDING ROSTER</span><strong id="remaining-count">100</strong></div>
+          <span class="stat-note">no plan assigned</span>
         </article>
       </section>
 
@@ -119,10 +120,16 @@
               <span class="section-number">01</span>
               <div><h3>Know your client</h3><p>Start with the person, not the program.</p></div>
             </div>
-            <label class="field-label" for="client-select">CLIENT ROSTER</label>
-            <div class="select-wrap">
-              <select id="client-select" class="input select-input" aria-label="Choose a client"></select>
-              <span class="select-chevron" aria-hidden="true">⌄</span>
+            <label class="field-label" for="client-search">CLIENT ROSTER</label>
+            <div class="client-filter-chips" role="group" aria-label="Filter clients">
+              <button type="button" class="client-filter-chip" data-client-filter="needs-plan" aria-pressed="false">Needs plan</button>
+              <button type="button" class="client-filter-chip" data-client-filter="medical" aria-pressed="false">Medical flags</button>
+              <button type="button" class="client-filter-chip" data-client-filter="vegetarian" aria-pressed="false">Veg</button>
+              <button type="button" class="client-filter-chip" data-client-filter="non-vegetarian" aria-pressed="false">Non-veg</button>
+            </div>
+            <div class="client-picker">
+              <input id="client-search" class="input" type="search" role="combobox" aria-autocomplete="list" aria-controls="client-options" aria-expanded="false" aria-label="Search clients" placeholder="Search 100 clients by name, goal, or ID" autocomplete="off" />
+              <div id="client-options" class="client-options" role="listbox" hidden></div>
             </div>
             <div id="client-profile" class="client-card"></div>
           </div>
@@ -166,11 +173,13 @@
               <div><h3>Set nutrition targets</h3><p>A flexible guide. Never a measure of worth.</p></div>
             </div>
             <div class="macro-grid">
-              <label class="macro-field"><span>CALORIES <small>kcal / day</small></span><input id="macro-calories" class="input" type="number" min="0" step="50" value="2000" /></label>
+              <label class="macro-field"><span>CALORIES <small>calculated from macros</small></span><input id="macro-calories" class="input" type="number" min="0" step="1" value="2000" readonly aria-describedby="macro-summary" /></label>
               <label class="macro-field"><span>PROTEIN <small>grams / day</small></span><input id="macro-protein" class="input" type="number" min="0" step="5" value="130" /></label>
               <label class="macro-field"><span>CARBS <small>grams / day</small></span><input id="macro-carbs" class="input" type="number" min="0" step="5" value="220" /></label>
               <label class="macro-field"><span>FATS <small>grams / day</small></span><input id="macro-fat" class="input" type="number" min="0" step="5" value="65" /></label>
             </div>
+            <p id="macro-summary" class="macro-summary" aria-live="polite"></p>
+            <p id="macro-client-ratios" class="macro-client-ratios" aria-live="polite"></p>
             <details class="food-details">
               <summary>Browse the shared food reference <span id="food-count" class="food-count"></span></summary>
               <div id="food-list" class="food-list"></div>
@@ -180,6 +189,7 @@
           <div class="builder-footer">
             <span id="save-message" class="save-message" aria-live="polite"></span>
             <div class="footer-actions">
+              <button id="export-client-card" class="button button-outline" type="button">Print / Export Client Card</button>
               <button id="reset-plan" class="button button-quiet" type="button">Reset</button>
               <button id="save-plan" class="button button-primary" type="button">
                 <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 3.5h10l2.5 2.6v10.4h-13zM7 3.5v4h6v-4M7 16.5v-6h6v6" /></svg>
@@ -212,7 +222,7 @@
             <span>Review this plan</span>
             <span class="button-arrow" aria-hidden="true">→</span>
           </button>
-          <p class="ai-action-note">A concise client profile and plan are sent to your selected AI provider for review. If it takes longer than 120 seconds, the request will time out with an error.</p>
+          <p class="ai-action-note">A concise client profile and plan are sent to your selected AI provider. Requests time out after 35 seconds.</p>
 
           <div id="ai-output" class="ai-output" aria-live="polite">
             <div class="empty-state">
@@ -302,6 +312,15 @@
           <button class="button button-primary" type="submit">Continue to review <span aria-hidden="true">→</span></button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="export-dialog" class="export-dialog" aria-labelledby="export-title">
+      <div class="export-dialog-actions">
+        <button id="copy-client-plan" class="button button-outline" type="button">Copy WhatsApp summary</button>
+        <button id="print-client-plan" class="button button-primary" type="button">Print / Save PDF</button>
+        <button id="close-export" class="icon-button close-button" type="button" aria-label="Close export">×</button>
+      </div>
+      <article id="client-plan-export" class="client-plan-export"></article>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
